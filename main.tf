@@ -16,7 +16,7 @@
 
 locals {
   tmp_credentials_path = "${path.module}/terraform-google-credentials.json"
-  cache_path           = "${path.module}/cache/${random_id.cache[0].hex}"
+  cache_path           = "${path.module}/cache/${random_id.cache.hex}"
   gcloud_tar_path      = "${local.cache_path}/google-cloud-sdk.tar.gz"
   gcloud_bin_path      = "${local.cache_path}/google-cloud-sdk/bin"
   gcloud_bin_abs_path  = abspath(local.gcloud_bin_path)
@@ -30,10 +30,7 @@ locals {
   create_cmd_bin  = "${local.gcloud_bin_path}/${var.create_cmd_entrypoint}"
   destroy_cmd_bin = "${local.gcloud_bin_path}/${var.destroy_cmd_entrypoint}"
 
-  wait = length(null_resource.additional_components.*.triggers) + length(
-    null_resource.gcloud_auth_service_account_key_file.*.triggers,
-    ) + length(null_resource.gcloud_auth_google_credentials.*.triggers,
-  ) + length(null_resource.run_command.*.triggers) + length(null_resource.run_destroy_command.*.triggers)
+  wait = length(null_resource.run_command.*.triggers) + length(null_resource.run_destroy_command.*.triggers)
 
   prepare_cache_command                        = "mkdir -p ${local.cache_path}"
   download_gcloud_command                      = "curl -sL -o ${local.cache_path}/google-cloud-sdk.tar.gz ${local.gcloud_download_url}"
@@ -45,8 +42,6 @@ locals {
 }
 
 resource "random_id" "cache" {
-  count = (!local.skip_download) ? 1 : 0
-
   byte_length = 4
 }
 
@@ -66,7 +61,7 @@ resource "null_resource" "prepare_cache" {
 
   provisioner "local-exec" {
     when    = create
-    command = self.triggers.prepare_cache_command
+    command = local.prepare_cache_command
   }
 
   depends_on = [null_resource.module_depends_on]
@@ -80,7 +75,7 @@ resource "null_resource" "download_gcloud" {
 
   provisioner "local-exec" {
     when    = create
-    command = self.triggers.download_gcloud_command
+    command = local.download_gcloud_command
   }
 
   depends_on = [null_resource.prepare_cache]
@@ -94,7 +89,7 @@ resource "null_resource" "download_jq" {
 
   provisioner "local-exec" {
     when    = create
-    command = self.triggers.download_jq_command
+    command = local.download_jq_command
   }
 
   depends_on = [null_resource.prepare_cache]
@@ -108,7 +103,7 @@ resource "null_resource" "decompress" {
 
   provisioner "local-exec" {
     when    = create
-    command = self.triggers.decompress_command
+    command = local.decompress_command
   }
 
   depends_on = [null_resource.download_gcloud, null_resource.download_jq]
@@ -121,7 +116,6 @@ resource "null_resource" "run_command" {
   depends_on = [
     null_resource.module_depends_on,
     null_resource.decompress,
-    null_resource.additional_components,
   ]
 
   triggers = merge({
@@ -147,8 +141,7 @@ resource "null_resource" "run_destroy_command" {
 
   depends_on = [
     null_resource.module_depends_on,
-    null_resource.decompress,
-    null_resource.additional_components
+    null_resource.decompress
   ]
 
   triggers = merge({
