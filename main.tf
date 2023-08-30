@@ -1,21 +1,5 @@
-/**
- * Copyright 2018 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 locals {
-  tmp_credentials_path = "${path.module}/terraform-google-credentials.json"
   cache_path           = "${path.module}/cache/${random_id.cache.hex}"
   gcloud_tar_path      = "${local.cache_path}/google-cloud-sdk.tar.gz"
   gcloud_bin_path      = "${local.cache_path}/google-cloud-sdk/bin"
@@ -37,8 +21,6 @@ locals {
   download_jq_command                          = "curl -sL -o ${local.cache_path}/jq ${local.jq_download_url} && chmod +x ${local.cache_path}/jq"
   decompress_command                           = "tar -xzf ${local.gcloud_tar_path} -C ${local.cache_path} && cp ${local.cache_path}/jq ${local.cache_path}/google-cloud-sdk/bin/"
   decompress_wrapper                           = "${local.prepare_cache_command} && ${local.download_gcloud_command} && ${local.download_jq_command} && ${local.decompress_command}"
-  additional_components_command                = "${path.module}/scripts/check_components.sh ${local.gcloud} ${local.components}"
-  
 }
 
 resource "random_id" "cache" {
@@ -53,69 +35,11 @@ resource "null_resource" "module_depends_on" {
   }
 }
 
-resource "null_resource" "prepare_cache" {
-
-  triggers = {
-     always_run = "${timestamp()}"
-  }
-
-  provisioner "local-exec" {
-    when    = create
-    command = local.prepare_cache_command
-  }
-
-  depends_on = [null_resource.module_depends_on]
-}
-
-resource "null_resource" "download_gcloud" {
-  
-  triggers = {
-     always_run = "${timestamp()}"
-  }
-
-  provisioner "local-exec" {
-    when    = create
-    command = local.download_gcloud_command
-  }
-
-  depends_on = [null_resource.prepare_cache]
-}
-
-resource "null_resource" "download_jq" {
-
-  triggers = {
-     always_run = "${timestamp()}"
-  }
-
-  provisioner "local-exec" {
-    when    = create
-    command = local.download_jq_command
-  }
-
-  depends_on = [null_resource.prepare_cache]
-}
-
-resource "null_resource" "decompress" {
-
-  triggers = {
-     always_run = "${timestamp()}"
-  }
-
-  provisioner "local-exec" {
-    when    = create
-    command = local.decompress_command
-  }
-
-  depends_on = [null_resource.download_gcloud, null_resource.download_jq]
-}
-
-
 resource "null_resource" "run_command" {
   count = var.enabled ? 1 : 0
 
   depends_on = [
     null_resource.module_depends_on,
-    null_resource.decompress,
   ]
 
   triggers = merge({
@@ -129,6 +53,7 @@ resource "null_resource" "run_command" {
   provisioner "local-exec" {
     when    = create
     command = <<-EOT
+    ${local.decompress_wrapper}
     PATH=${self.triggers.gcloud_bin_abs_path}:$PATH
     ${self.triggers.create_cmd_entrypoint} ${self.triggers.create_cmd_body}
     EOT
@@ -140,19 +65,20 @@ resource "null_resource" "run_destroy_command" {
   count = var.enabled ? 1 : 0
 
   depends_on = [
-    null_resource.module_depends_on,
-    null_resource.decompress
+    null_resource.module_depends_on
   ]
 
   triggers = merge({
     destroy_cmd_entrypoint = var.destroy_cmd_entrypoint
     destroy_cmd_body       = var.destroy_cmd_body
     gcloud_bin_abs_path    = local.gcloud_bin_abs_path
+    decompress_wrapper     = local.decompress_wrapper
   }, var.create_cmd_triggers)
 
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
+    ${self.triggers.decompress_wrapper}
     PATH=${self.triggers.gcloud_bin_abs_path}:$PATH
     ${self.triggers.destroy_cmd_entrypoint} ${self.triggers.destroy_cmd_body}
     EOT
