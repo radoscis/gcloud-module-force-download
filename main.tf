@@ -47,15 +47,14 @@ resource "null_resource" "run_command" {
     arguments             = md5(var.create_cmd_body)
     create_cmd_entrypoint = var.create_cmd_entrypoint
     create_cmd_body       = var.create_cmd_body
-    gcloud_bin_abs_path   = local.gcloud_bin_abs_path
+    gcloud_bin_path       = local.gcloud_bin_path
   }, var.create_cmd_triggers)
 
   provisioner "local-exec" {
     when    = create
     command = <<-EOT
     ${local.decompress_wrapper}
-    PATH=${self.triggers.gcloud_bin_abs_path}:$PATH
-    ${self.triggers.create_cmd_entrypoint} ${self.triggers.create_cmd_body}
+    "${self.triggers.gcloud_bin_path}/${self.triggers.create_cmd_entrypoint}" ${self.triggers.create_cmd_body}
     EOT
   }
 
@@ -71,16 +70,15 @@ resource "null_resource" "run_destroy_command" {
   triggers = merge({
     destroy_cmd_entrypoint = var.destroy_cmd_entrypoint
     destroy_cmd_body       = var.destroy_cmd_body
-    gcloud_bin_abs_path    = local.gcloud_bin_abs_path
     decompress_wrapper     = local.decompress_wrapper
+    gcloud_bin_path       = local.gcloud_bin_path
   }, var.create_cmd_triggers)
 
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
     ${self.triggers.decompress_wrapper}
-    PATH=${self.triggers.gcloud_bin_abs_path}:$PATH
-    ${self.triggers.destroy_cmd_entrypoint} ${self.triggers.destroy_cmd_body}
+    "${self.triggers.gcloud_bin_path}/${self.triggers.destroy_cmd_entrypoint}" ${self.triggers.destroy_cmd_body}
     EOT
   }
 }
