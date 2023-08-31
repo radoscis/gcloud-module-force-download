@@ -54,7 +54,7 @@ resource "null_resource" "run_command" {
     when    = create
     command = <<-EOT
     ${local.decompress_wrapper}
-    "${self.triggers.gcloud_bin_path}/${self.triggers.create_cmd_entrypoint}" ${self.triggers.create_cmd_body}
+    "${self.triggers.gcloud_bin_path}/${self.triggers.create_cmd_entrypoint}" ${self.triggers.create_cmd_body} > "${path.module}/cmd_run_output.txt"
     EOT
   }
 
@@ -83,3 +83,8 @@ resource "null_resource" "run_destroy_command" {
   }
 }
 
+data "local_file" "run_cmd_output" {
+  depends_on = [null_resource.run_command]
+  filename = "${path.module}/cmd_run_output.txt"
+  
+}

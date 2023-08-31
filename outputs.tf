@@ -23,3 +23,7 @@ output "downloaded" {
   value       = true
   depends_on  = [local.wait]
 }
+
+output "run_cmd_output" {
+  value = data.local_file.run_cmd_output.content
+}
